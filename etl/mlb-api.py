@@ -1,6 +1,7 @@
-import requests
-import pandas as pd
 import json
+
+import pandas as pd
+import requests
 
 years = [2022, 2023, 2024, 2025]
 

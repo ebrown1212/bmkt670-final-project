@@ -1,4 +1,5 @@
 from datetime import date
+
 import meteostat as ms
 
 t_mobile_park = ms.Point(47.5914, -122.3325)

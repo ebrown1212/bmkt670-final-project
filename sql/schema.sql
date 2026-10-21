@@ -1,5 +1,10 @@
+-- Seattle Mariners Attendance Prediction
+-- BMKT 670 Final Project
+-- Purpose: Define and rebuild the PostgreSQL database schema
+-- for historical game data, weather observations, and ML features.
 
 -- Drop existing tables so the schema can be rebuilt.
+DROP TABLE IF EXISTS ml_features_attendance CASCADE;
 DROP TABLE IF EXISTS fact_weather CASCADE;
 DROP TABLE IF EXISTS fact_game CASCADE;
 DROP TABLE IF EXISTS dim_venue CASCADE;
@@ -64,4 +69,30 @@ CREATE TABLE fact_weather (
     humidity INTEGER,
     precipitation_in NUMERIC,
     wind_speed_mph NUMERIC
+);
+
+
+-- One row per Mariners home game with recorded attendance.
+CREATE TABLE ml_features_attendance (
+    game_id INTEGER PRIMARY KEY REFERENCES fact_game(game_id),
+    date_key INTEGER REFERENCES dim_date(date_key),
+    opponent_key INTEGER REFERENCES dim_team(team_key),
+    venue_key INTEGER REFERENCES dim_venue(venue_key),
+    attendance INTEGER,
+    game_datetime TIMESTAMPTZ,
+    day_night TEXT,
+    doubleheader TEXT,
+    series_game_number INTEGER,
+    game_date DATE,
+    season INTEGER,
+    prediction_date DATE,
+    rolling_avg_attendance_5 NUMERIC,
+    days_since_previous_home_game INTEGER,
+    has_attendance_history BOOLEAN,
+    month INTEGER,
+    day_of_week TEXT,
+    is_weekend BOOLEAN,
+    is_holiday BOOLEAN,
+    team_name TEXT,
+    data_split TEXT
 );

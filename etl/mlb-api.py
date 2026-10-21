@@ -1,5 +1,9 @@
-import json
+# Seattle Mariners Attendance Prediction
+# BMKT 670 Final Project
+# Purpose: Extract regular-season Mariners home-game schedules
+# and game information from the MLB Stats API for 2022–2025.
 
+import json
 import pandas as pd
 import requests
 

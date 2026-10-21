@@ -12,6 +12,8 @@ Game attendance, measured as the number of fans attending each home game.
 
 One row in my ML feature table = one Seattle Mariners home game.
 
+The model is intended to predict attendance seven days before each game.
+
 ## Business Decisions Supported
 
 - Estimate potential in-stadium advertising exposure to support advertising sales negotiations.
@@ -50,34 +52,50 @@ Historical daily weather observations for Seattle from 2022–2025.
 
 **Source:** https://dev.meteostat.net/python/
 
-All three datasets are collected using Python and saved as CSV files in `data/raw/`.
+All three datasets are collected using Python and saved in `data/raw/`. The MLB API extraction also saves the original JSON responses.
 
 ## Database Design
 
 The project uses a PostgreSQL star schema centered around `fact_game`, with one row representing each Seattle Mariners home game.
 
-The planned database includes:
+The database includes:
 
 - **dim_date:** Game dates and calendar information.
 - **dim_team:** Team and opponent information.
 - **dim_venue:** Stadium information.
-- **fact_game:** Game-level information, including attendance, results, and pregame performance.
-- **fact_weather:** Daily weather observations associated with game dates.
+- **fact_game:** Game-level information, including attendance, results, and scores.
+- **fact_weather:** Daily weather observations for Seattle.
+- **ml_features_attendance:** Game-level features used to predict attendance, including opponent, calendar information, historical attendance, and scheduling variables.
 
-A separate `ml_features_attendance` table will combine relevant game, calendar, opponent, historical attendance, pregame performance, and weather variables for predictive modeling. This table will be developed in a later stage.
+The database contains 324 home games from the 2022–2025 seasons. One game has missing attendance, leaving 323 observations in the ML feature table.
 
-## How to Run
+### Feature Engineering
 
-1. Create a Python virtual environment using `python -m venv .venv`.
-2. Activate the environment in PowerShell using `.\.venv\Scripts\Activate.ps1`.
-3. Install the required packages using `pip install -r requirements.txt`.
-4. Create a `.env` file containing the required database credentials. Do not commit this file to GitHub.
-5. Run the extraction scripts in the `etl/` folder to retrieve the raw datasets.
-6. Run `sql/schema.sql` in pgAdmin or psql to create the PostgreSQL database tables.
-7. Run `python db_check.py` to verify the database connection and display the created tables.
+The initial ML feature table includes two derived features:
 
-The extraction scripts, database schema, and database verification script will be finalized during project development.
+- **Five-game rolling attendance average:** Average attendance from up to five previous home games within the same season, using only attendance available before the seven-day prediction cutoff.
+- **Days since previous home game:** Number of calendar days since the previous scheduled home game, resetting at the beginning of each season.
 
-## AI Usage
+The rolling attendance average is missing for 28 games without eligible historical attendance. These values are preserved as NULL, with a separate indicator identifying whether attendance history is available.
 
-ChatGPT was used to assist with project planning, repository setup, Python development, debugging, and code review. AI-generated code will be reviewed, tested, and validated before being incorporated into the project. Business questions, database design, feature selection, and interpretation of results remain my responsibility.
+Opponent and day-of-week categories are stored as text in PostgreSQL. Categorical encoding will be performed in Python during the modeling stage.
+
+Actual game-day precipitation is excluded from the initial seven-day-ahead prediction features because it would not be known when the prediction is made.
+
+### Training, Validation, and Testing
+
+The data is divided chronologically to evaluate predictions on later seasons:
+
+| Dataset | Seasons | Games |
+|---|---|---|
+| Training | 2022–2023 | 161 |
+| Validation | 2024 | 81 |
+| Testing | 2025 | 81 |
+| **Total** | | **323** |
+
+## Data Quality
+
+The project includes seven automated data-quality checks:
+
+1. No duplicate game IDs.
+2. Attendance values within the defined

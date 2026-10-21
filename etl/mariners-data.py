@@ -1,3 +1,8 @@
+# Seattle Mariners Attendance Prediction
+# BMKT 670 Final Project
+# Purpose: Extract Seattle Mariners home-game results and attendance
+# from Baseball-Reference for the 2022–2025 seasons.
+
 import pandas as pd
 
 years = [2022, 2023, 2024, 2025]

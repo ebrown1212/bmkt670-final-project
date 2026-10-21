@@ -1,5 +1,9 @@
-from datetime import date
+# Seattle Mariners Attendance Prediction
+# BMKT 670 Final Project
+# Purpose: Extract daily Seattle weather observations from Meteostat
+# for 2022–2025 and standardize measurements to U.S. units.
 
+from datetime import date
 import meteostat as ms
 
 t_mobile_park = ms.Point(47.5914, -122.3325)
@@ -18,7 +22,6 @@ weather_df = weather.fetch()
 
 weather_df.to_csv("data/raw/seattle_weather_raw_2022_2025.csv")
 
-weather_df.to_csv("data/raw/seattle_weather_2022_2025.csv", index=False)
 
 weather_df["temp"] = (weather_df["temp"] * 9 / 5) + 32
 weather_df["tmin"] = (weather_df["tmin"] * 9 / 5) + 32
@@ -51,7 +54,7 @@ weather_df = weather_df.rename(columns={
     "time": "date"
 })
 
-weather_df.to_csv("data/seattle_weather_2022_2025.csv", index=False)
+weather_df.to_csv("data/raw/seattle_weather_2022_2025.csv", index=False)
 
 print("\nFinal weather data:")
 print(weather_df)

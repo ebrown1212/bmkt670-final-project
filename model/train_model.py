@@ -233,3 +233,54 @@ feature_importance = pd.Series(
 
 print("\nTop 10 Random Forest Features:")
 print(feature_importance.head(10))
+
+# Prepare Random Forest predictions for PostgreSQL.
+predictions = []
+
+for split_name, X, y, games in [
+    ("train", X_train, y_train, train),
+    ("validation", X_validate, y_validate, validate),
+    ("test", X_test, y_test, test)
+]:
+    predicted_values = forest_model.predict(X)
+
+    for game_id, actual, predicted in zip(
+        games["game_id"], y, predicted_values
+    ):
+        predictions.append((
+            int(game_id),
+            split_name,
+            int(actual),
+            float(predicted),
+            float(actual - predicted),
+            "random_forest"
+        ))
+
+print("\nPredictions prepared:", len(predictions))
+
+conn = psycopg2.connect(
+    host=os.getenv("DB_HOST"),
+    dbname=os.getenv("DB_NAME"),
+    user=os.getenv("DB_USER"),
+    password=os.getenv("DB_PASSWORD")
+)
+
+try:
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM public.model_predictions")
+
+        cur.executemany("""
+            INSERT INTO public.model_predictions
+                (game_id, split, actual, predicted, error, model_name)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, predictions)
+
+    conn.commit()
+    print("Predictions saved to PostgreSQL:", len(predictions))
+
+except Exception:
+    conn.rollback()
+    raise
+
+finally:
+    conn.close()

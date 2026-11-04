@@ -12,7 +12,8 @@ steps = [
     ("Extract weather data", "etl/weather-data.py"),
     ("Transform data", "etl/transform.py"),
     ("Load PostgreSQL", "etl/load.py"),
-    ("Run quality checks", "etl/quality_checks.py")
+    ("Run quality checks", "etl/quality_checks.py"),
+    ("Train attendance models", "model/train_model.py")
 ]
 
 for name, script in steps:

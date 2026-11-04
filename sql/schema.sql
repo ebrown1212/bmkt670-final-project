@@ -4,6 +4,7 @@
 -- for historical game data, weather observations, and ML features.
 
 -- Drop existing tables so the schema can be rebuilt.
+DROP TABLE IF EXISTS model_predictions CASCADE;
 DROP TABLE IF EXISTS ml_features_attendance CASCADE;
 DROP TABLE IF EXISTS fact_weather CASCADE;
 DROP TABLE IF EXISTS fact_game CASCADE;
@@ -96,4 +97,14 @@ CREATE TABLE ml_features_attendance (
     is_holiday BOOLEAN,
     team_name TEXT,
     data_split TEXT
+);
+
+-- Store attendance predictions from the selected model.
+CREATE TABLE model_predictions (
+    game_id INTEGER PRIMARY KEY REFERENCES fact_game(game_id),
+    split TEXT,
+    actual INTEGER,
+    predicted NUMERIC,
+    error NUMERIC,
+    model_name TEXT
 );

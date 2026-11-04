@@ -234,6 +234,36 @@ print("\nMissing weather values:")
 print(fact_weather.isna().sum())
 
 
+# Extract Mariners overall winning percentage from completed MLB games.
+team_records = []
+
+for year in [2022, 2023, 2024, 2025]:
+    with open(f"data/raw/mlb_schedule_{year}_raw.json", encoding="utf-8") as file:
+        data = json.load(file)
+
+    for date in data["dates"]:
+        for game in date["games"]:
+            if game["gameType"] != "R" or game["status"]["detailedState"] != "Final":
+                continue
+
+            if game["teams"]["home"]["team"]["id"] == 136:
+                mariners = game["teams"]["home"]
+            else:
+                mariners = game["teams"]["away"]
+
+            team_records.append({
+                "game_date": game["officialDate"],
+                "season": year,
+                "mariners_win_pct": float(mariners["leagueRecord"]["pct"])
+            })
+
+team_records = pd.DataFrame(team_records)
+team_records["game_date"] = pd.to_datetime(team_records["game_date"])
+team_records = team_records.sort_values("game_date").reset_index(drop=True)
+
+print("\nHistorical Mariners team records:", len(team_records))
+print(team_records.head(10))
+
 # Calculate historical attendance available seven days before each game.
 ml_features = fact_game.copy()
 
@@ -247,6 +277,31 @@ ml_features["prediction_date"] = ml_features["game_date"] - pd.Timedelta(days=7)
 ml_features = ml_features.sort_values(
     ["game_date", "game_datetime", "game_id"]
 ).reset_index(drop=True)
+
+# Calculate Mariners winning percentage available before each prediction date.
+winning_percentages = []
+
+for _, game in ml_features.iterrows():
+    previous_records = team_records[
+        (team_records["season"] == game["season"]) &
+        (team_records["game_date"] < game["prediction_date"])
+    ]
+
+    if previous_records.empty:
+        winning_percentages.append(None)
+    else:
+        winning_percentages.append(
+            previous_records.iloc[-1]["mariners_win_pct"]
+        )
+
+ml_features["mariners_win_pct_at_prediction"] = winning_percentages
+
+print("\nMariners winning percentage feature:")
+print(ml_features[[
+    "game_date",
+    "prediction_date",
+    "mariners_win_pct_at_prediction"
+]].head(15))
 
 rolling_averages = []
 

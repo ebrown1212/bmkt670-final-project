@@ -86,6 +86,7 @@ CREATE TABLE ml_features_attendance (
     game_date DATE,
     season INTEGER,
     prediction_date DATE,
+    mariners_win_pct_at_prediction NUMERIC,
     rolling_avg_attendance_5 NUMERIC,
     days_since_previous_home_game INTEGER,
     has_attendance_history BOOLEAN,

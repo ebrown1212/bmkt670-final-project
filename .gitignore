@@ -4,3 +4,4 @@ data/raw/
 data/clean/
 data/raw_backup/
 __pycache__/
+model/attendance_model.joblib

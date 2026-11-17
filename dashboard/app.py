@@ -5,6 +5,7 @@ import pandas as pd
 import psycopg2
 import streamlit as st
 from dotenv import load_dotenv
+import joblib
 
 load_dotenv()
 
@@ -45,6 +46,19 @@ with conn.cursor() as cur:
     cur.execute(query)
     rows = cur.fetchall()
     columns = [column[0] for column in cur.description]
+    
+    baseline_query = """
+    SELECT AVG(ABS(attendance - (
+        SELECT AVG(attendance)
+        FROM ml_features_attendance
+        WHERE data_split = 'train'
+    )))
+    FROM ml_features_attendance
+    WHERE data_split = 'validation'
+    """
+
+    cur.execute(baseline_query)
+    baseline_mae = float(cur.fetchone()[0])
 
     prediction_query = """
     SELECT
@@ -195,7 +209,6 @@ elif page == "2. How Good Are the Predictions?":
 
     st.subheader("Model vs. Baseline")
 
-    baseline_mae = 6725
     model_mae = mae_by_split["validation"]
 
     improvement = (
@@ -224,10 +237,14 @@ elif page == "2. How Good Are the Predictions?":
     largest_errors["error_multiple"] = (
         largest_errors["absolute_error"] /
         largest_errors["mae_for_split"]
-    ).round(1)
+    )
 
     largest_errors["unusual"] = (
         largest_errors["error_multiple"] > 2
+    )
+
+    largest_errors["error_multiple"] = (
+        largest_errors["error_multiple"].round(1)
     )
 
     largest_errors = largest_errors.sort_values(
@@ -248,6 +265,14 @@ elif page == "2. How Good Are the Predictions?":
             ]
         ]
     )
+    st.write(
+        "The largest miss was game 745238: attendance was 44,924, "
+        "compared with a prediction of approximately 25,789, an "
+        "underprediction of 19,135 fans, or 3.3 times the validation MAE. "
+        "Promotions, special events, or advance ticket sales could help "
+        "explain the difference, but these factors were not included "
+        "in the model and have not been verified for this game."
+    )
 
 
 # ============================================================
@@ -257,7 +282,138 @@ elif page == "2. How Good Are the Predictions?":
 elif page == "3. What Should We Do?":
 
     st.header("What Should We Do?")
+    st.subheader("Predict Attendance for an Upcoming Home Game")
+
+    model_bundle = joblib.load("model/attendance_model.joblib")
+    
+    st.subheader("Business Recommendations")
+
+    opponent_history = (
+        df.groupby("opponent")["attendance"]
+        .agg(["count", "mean"])
+        .sort_values("mean", ascending=False)
+    )
+
+    top_opponent = opponent_history.index[0]
+    top_average = opponent_history.iloc[0]["mean"]
+    top_count = int(opponent_history.iloc[0]["count"])
 
     st.write(
-        "Business recommendations will be added next."
+        f"1. Prioritize reviewing advertising opportunities for "
+        f"games against the {top_opponent}. These games averaged "
+        f"{top_average:,.0f} attendees across {top_count} historical "
+        f"games. Check the game dates and sample size before "
+        f"assuming this pattern will continue."
     )
+
+    st.write(
+        f"2. Present advertisers with an attendance estimate and "
+        f"an uncertainty range rather than promising an exact crowd. "
+        f"The model's test MAE was "
+        f"{model_bundle['test_mae']:,.0f} fans, so use the prediction "
+        f"tool's range when discussing potential audience exposure."
+    )
+
+    st.write(
+        "Limitation: Attendance estimates potential in-stadium "
+        "audience size, not verified advertising impressions or "
+        "sales. The model also excludes promotions, ticket prices, "
+        "and advance ticket sales."
+    )
+
+    st.write(
+        "Enter information available seven days before the game. "
+        "Historical attendance and winning percentage must use "
+        "only games completed before that cutoff."
+    )
+
+    game_date = st.date_input("Upcoming home-game date")
+
+    opponent = st.selectbox(
+        "Opponent",
+        options=sorted(
+            column.removeprefix("team_name_")
+            for column in model_bundle["feature_columns"]
+            if column.startswith("team_name_")
+        )
+    )
+
+    day_night = st.selectbox(
+        "Day or night game",
+        options=["day", "night"]
+    )
+
+    is_holiday = st.checkbox("Game falls on a U.S. holiday")
+
+    recent_attendance = st.number_input(
+        "Average attendance at up to five eligible previous home games",
+        min_value=0.0,
+        value=float(
+            model_bundle["training_means"]["rolling_avg_attendance_5"]
+        ),
+        step=100.0
+    )
+
+    winning_percentage = st.number_input(
+        "Mariners winning percentage before the prediction cutoff",
+        min_value=0.0,
+        max_value=1.0,
+        value=float(
+            model_bundle["training_means"][
+                "mariners_win_pct_at_prediction"
+            ]
+        ),
+        step=0.01,
+        format="%.3f"
+    )
+
+    st.caption(
+        "The initial attendance and winning-percentage values are "
+        "training-data averages, not current team information. "
+        "For early-season games without eligible history, "
+        "use those defaults."
+    )
+
+    if st.button("Predict Attendance"):
+
+        new_game = pd.DataFrame([{
+            "is_weekend": game_date.weekday() >= 5,
+            "is_holiday": is_holiday,
+            "month": game_date.month,
+            "day_night": day_night,
+            "team_name": opponent,
+            "rolling_avg_attendance_5": recent_attendance,
+            "mariners_win_pct_at_prediction": winning_percentage
+        }])
+
+        new_game = new_game[model_bundle["features"]]
+
+        encoded_game = pd.get_dummies(new_game, dtype=int)
+
+        encoded_game = encoded_game.reindex(
+            columns=model_bundle["feature_columns"],
+            fill_value=0
+        )
+
+        prediction = float(
+            model_bundle["model"].predict(encoded_game)[0]
+        )
+
+        test_mae = model_bundle["test_mae"]
+
+        st.metric(
+            "Predicted Attendance",
+            f"{prediction:,.0f} fans"
+        )
+
+        st.write(
+            f"Prediction ± test MAE: "
+            f"{prediction - test_mae:,.0f} to "
+            f"{prediction + test_mae:,.0f} fans."
+        )
+
+        st.caption(
+            f"The test MAE was {test_mae:,.0f} fans. "
+            "This range is a typical-error guide, not a "
+            "statistical prediction interval or guarantee."
+        )

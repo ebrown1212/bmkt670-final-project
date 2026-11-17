@@ -12,6 +12,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.ensemble import RandomForestRegressor
+import joblib
 
 load_dotenv()
 
@@ -111,8 +112,11 @@ train = train.copy()
 validate = validate.copy()
 test = test.copy()
 
+training_means = {}
+
 for feature in numeric_features:
     training_mean = train[feature].mean()
+    training_means[feature] = training_mean
 
     train[feature] = train[feature].fillna(training_mean)
     validate[feature] = validate[feature].fillna(training_mean)
@@ -284,3 +288,18 @@ except Exception:
 
 finally:
     conn.close()
+    
+model_bundle = {
+    "model": forest_model,
+    "features": features,
+    "feature_columns": X_train.columns.tolist(),
+    "training_means": training_means,
+    "test_mae": float(test_mae)
+}
+
+joblib.dump(
+    model_bundle,
+    "model/attendance_model.joblib"
+)
+
+print("\nModel and preprocessing information saved.")

@@ -46,7 +46,7 @@ with conn.cursor() as cur:
     cur.execute(query)
     rows = cur.fetchall()
     columns = [column[0] for column in cur.description]
-    
+
     baseline_query = """
     SELECT AVG(ABS(attendance - (
         SELECT AVG(attendance)
@@ -99,7 +99,7 @@ if page == "1. What Happened?":
     st.write("Historical Mariners home-game attendance")
     st.dataframe(filtered_df)
 
-    st.write("Total games:", len(df))
+    st.write("Games in selected seasons:", len(filtered_df))
 
     st.subheader("Average Attendance by Season")
 
@@ -113,7 +113,7 @@ if page == "1. What Happened?":
 
     st.write(
         "This chart compares average home-game attendance "
-        "across the four seasons."
+        "across the selected seasons."
     )
 
     st.subheader("Average Attendance by Opponent")
@@ -185,13 +185,12 @@ elif page == "2. How Good Are the Predictions?":
     mae_by_split = (
         predictions_df.groupby("split")["absolute_error"]
         .mean()
-        .round(0)
     )
 
     st.subheader("Model Prediction Accuracy")
 
     st.write("Mean Absolute Error by Dataset:")
-    st.dataframe(mae_by_split)
+    st.dataframe(mae_by_split.round(0))
 
     st.subheader("Predicted vs. Actual Attendance")
 
@@ -285,7 +284,7 @@ elif page == "3. What Should We Do?":
     st.subheader("Predict Attendance for an Upcoming Home Game")
 
     model_bundle = joblib.load("model/attendance_model.joblib")
-    
+
     st.subheader("Business Recommendations")
 
     opponent_history = (
@@ -416,4 +415,75 @@ elif page == "3. What Should We Do?":
             f"The test MAE was {test_mae:,.0f} fans. "
             "This range is a typical-error guide, not a "
             "statistical prediction interval or guarantee."
+        )
+
+    st.subheader("AI Summaries of Historical Test Games")
+
+    summary_conn = psycopg2.connect(
+        host=os.getenv("DB_HOST"),
+        dbname=os.getenv("DB_NAME"),
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASSWORD")
+    )
+
+    with summary_conn.cursor() as cur:
+        cur.execute("""
+            SELECT
+                a.game_id,
+                d.full_date AS game_date,
+                t.team_name AS opponent,
+                p.predicted,
+                p.actual,
+                a.summary,
+                a.created_at
+            FROM ai_summaries a
+            JOIN model_predictions p
+                ON a.game_id = p.game_id
+            JOIN fact_game g
+                ON a.game_id = g.game_id
+            JOIN dim_date d
+                ON g.date_key = d.date_key
+            JOIN dim_team t
+                ON g.opponent_key = t.team_key
+            WHERE p.split = 'test'
+            ORDER BY d.full_date, a.game_id
+        """)
+
+        summary_rows = cur.fetchall()
+        summary_columns = [
+            column[0] for column in cur.description
+        ]
+
+    summary_conn.close()
+
+    summaries_df = pd.DataFrame(
+        summary_rows,
+        columns=summary_columns
+    )
+
+    st.write("Stored test-game summaries:", len(summaries_df))
+
+    if summaries_df.empty:
+        st.info("Run the AI summary script to generate summaries.")
+    else:
+        selected_game_id = st.selectbox(
+            "Select a historical test game",
+            options=summaries_df["game_id"].tolist()
+        )
+
+        selected_summary = summaries_df[
+            summaries_df["game_id"] == selected_game_id
+        ].iloc[0]
+
+        st.write(
+            f"Game date: {selected_summary['game_date']} | "
+            f"Opponent: {selected_summary['opponent']}"
+        )
+
+        st.write(selected_summary["summary"])
+
+        st.caption(
+            "AI-generated historical review using stored game facts. "
+            "Three sample summaries were checked against their source "
+            "data; other summaries may still contain errors."
         )

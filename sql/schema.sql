@@ -11,6 +11,7 @@ DROP TABLE IF EXISTS fact_game CASCADE;
 DROP TABLE IF EXISTS dim_venue CASCADE;
 DROP TABLE IF EXISTS dim_team CASCADE;
 DROP TABLE IF EXISTS dim_date CASCADE;
+DROP TABLE IF EXISTS ai_summaries CASCADE;
 
 
 -- One row represents one calendar date.
@@ -107,4 +108,10 @@ CREATE TABLE model_predictions (
     predicted NUMERIC,
     error NUMERIC,
     model_name TEXT
+);
+
+CREATE TABLE ai_summaries (
+    game_id INTEGER PRIMARY KEY REFERENCES fact_game(game_id),
+    summary TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

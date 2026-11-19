@@ -154,3 +154,38 @@ Pipeline completed successfully!
 ```
 
 The pipeline rebuilds the database tables and replaces existing predictions, allowing the workflow to be rerun without creating duplicate records.
+
+## Run the Dashboard
+
+Create a `.env` file in the project root containing your PostgreSQL
+connection settings and Claude API key:
+
+```text
+DB_HOST=your_database_host
+DB_NAME=your_database_name
+DB_USER=your_database_user
+DB_PASSWORD=your_database_password
+ANTHROPIC_API_KEY=your_api_key
+```
+
+Keep `.env` out of GitHub.
+
+With the project's virtual environment activated and PostgreSQL running,
+run these commands from the project root:
+
+```powershell
+python .\run_pipeline.py
+python -m streamlit run .\dashboard\app.py
+```
+
+The pipeline rebuilds the database, saves the trained model and preprocessing
+information to `model/attendance_model.joblib`, and generates AI summaries
+for all test games. Each full run makes new Claude API calls.
+
+The dashboard includes historical attendance analysis, model evaluation,
+business recommendations, an upcoming-game prediction tool, and stored
+AI summaries. Viewing the dashboard does not call the Claude API.
+
+The saved model file is excluded from GitHub and rebuilt by the pipeline.
+The prediction range is the predicted attendance plus or minus test MAE;
+it is a typical-error guide, not a statistical prediction interval.

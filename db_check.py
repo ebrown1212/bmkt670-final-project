@@ -1,3 +1,7 @@
+# Seattle Mariners Attendance Prediction
+# BMKT 670 Final Project
+# Purpose: Verify the PostgreSQL database connection and list
+# the tables available in the public schema.
 
 import os
 

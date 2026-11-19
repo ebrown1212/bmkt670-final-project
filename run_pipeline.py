@@ -1,8 +1,3 @@
-# Seattle Mariners Attendance Prediction
-# BMKT 670 Final Project
-# Purpose: Run data extraction, transformation, PostgreSQL loading,
-# and automated quality checks in sequence with one command.
-
 import subprocess
 import sys
 
@@ -13,7 +8,8 @@ steps = [
     ("Transform data", "etl/transform.py"),
     ("Load PostgreSQL", "etl/load.py"),
     ("Run quality checks", "etl/quality_checks.py"),
-    ("Train attendance models", "model/train_model.py")
+    ("Train attendance models", "model/train_model.py"),
+    ("Generate AI summaries", "ai/generate_summaries.py")
 ]
 
 for name, script in steps:

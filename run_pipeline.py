@@ -1,5 +1,10 @@
+import os
 import subprocess
 import sys
+
+os.makedirs("data/raw", exist_ok=True)
+os.makedirs("data/clean", exist_ok=True)
+os.makedirs("docs/figures", exist_ok=True)
 
 steps = [
     ("Extract Baseball-Reference data", "etl/mariners-data.py"),

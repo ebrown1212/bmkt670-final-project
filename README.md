@@ -1,191 +1,313 @@
-# Seattle Mariners Home Game Attendance Prediction
+# Seattle Mariners Attendance Prediction and Advertising Sales Intelligence
 
 ## Business Question
 
-How many fans will attend an upcoming Seattle Mariners home game at T-Mobile Park?
+How many fans will attend an upcoming Seattle Mariners home game at T-Mobile Park, using information available seven days before the game?
 
-## Target Variable
+The dashboard is designed for a Mariners advertising sales manager reviewing historical attendance, assessing potential in-stadium audience size, and identifying games that warrant closer review for advertising opportunities.
 
-Game attendance, measured as the number of fans attending each home game.
+Attendance is not a measure of verified advertising impressions, advertising revenue, or sales. This academic project has not demonstrated a realized business return.
 
-## Prediction Unit
+## Project Overview
 
-One row in my ML feature table = one Seattle Mariners home game.
+Python scripts collect historical data, transform it into analytical tables, load PostgreSQL, run data-quality checks, train attendance models, and generate AI summaries of test-game predictions.
 
-The model is intended to predict attendance seven days before each game.
+A three-page Streamlit dashboard provides:
 
-## Business Decisions Supported
-
-- Estimate potential in-stadium advertising exposure to support advertising sales negotiations.
-- Improve revenue forecasting based on expected game attendance.
-- Support demand for future capital investments based on expected and historical attendance patterns.
+1. Historical attendance analysis with a season filter.
+2. Model evaluation, baseline comparison, and largest prediction errors.
+3. Business recommendations, a future-game prediction tool, and stored AI summaries.
 
 ## Data Sources
 
-### 1. Baseball-Reference
+| Source | Information Used | Access |
+|---|---|---|
+| Baseball-Reference | Historical home-game attendance, dates, opponents, results, and scores | Schedule tables read with pandas |
+| MLB Stats API | Game IDs, schedule information, opponents, venues, day/night designation, and historical team records | Python HTTP requests; original JSON responses retained locally |
+| Meteostat | Historical daily Seattle weather observations | Meteostat Python package |
 
-Historical Seattle Mariners game data from the 2022–2025 seasons.
+The project covers the 2022–2025 seasons.
 
-**Data collected:** Game dates, opponents, attendance, results, team records, standings, and streaks.
+Sources:
 
-**Access:** Python extraction from publicly available schedule and results tables.
+- Baseball-Reference: https://www.baseball-reference.com/teams/SEA/2025-schedule-scores.shtml
+- MLB Stats API: https://statsapi.mlb.com/api/v1/schedule
+- Meteostat: https://dev.meteostat.net/python/
 
-**Source:** https://www.baseball-reference.com/teams/SEA/2025-schedule-scores.shtml
+Extracted data is saved in `data/raw/`. Transformed data is saved in `data/clean/`. Both folders are excluded from GitHub and created by the pipeline.
 
-### 2. MLB Stats API
-
-Historical MLB schedule data for Seattle Mariners home games from 2022–2025.
-
-**Data collected:** Game IDs, dates, scheduled start times, opponents, venues, day/night designation, doubleheader status, and series game numbers.
-
-**Access:** Python requests to the MLB Stats API.
-
-**Source:** https://statsapi.mlb.com/api/v1/schedule
-
-### 3. Meteostat
-
-Historical daily weather observations for Seattle from 2022–2025.
-
-**Data collected:** Temperature, humidity, precipitation, and wind speed.
-
-**Access:** Meteostat Python package.
-
-**Source:** https://dev.meteostat.net/python/
-
-All three datasets are collected using Python and saved in `data/raw/`. The MLB API extraction also saves the original JSON responses.
+Historical observed weather is retained for analysis but is not used by the attendance model. Actual game-day weather would not be known seven days before a game.
 
 ## Database Design
 
-The project uses a PostgreSQL star schema centered around `fact_game`, with one row representing each Seattle Mariners home game.
+The PostgreSQL star schema centers on `fact_game`, with one row per Mariners home game.
 
-The database includes:
+| Table | Purpose |
+|---|---|
+| dim_date | Calendar dates, seasons, months, weekends, and holidays |
+| dim_team | Opponent identifiers and names |
+| dim_venue | Stadium information |
+| fact_game | Game-level attendance, schedule information, results, and scores |
+| fact_weather | Daily Seattle weather observations |
+| ml_features_attendance | Game-level features and chronological dataset assignments |
+| model_predictions | Actual attendance, predictions, signed errors, model name, and split |
+| ai_summaries | One stored summary per test game, with its generation timestamp |
 
-- **dim_date:** Game dates and calendar information.
-- **dim_team:** Team and opponent information.
-- **dim_venue:** Stadium information.
-- **fact_game:** Game-level information, including attendance, results, and scores.
-- **fact_weather:** Daily weather observations for Seattle.
-- **ml_features_attendance:** Game-level features used to predict attendance, including opponent, calendar information, historical attendance, and scheduling variables.
-- **model_predictions:** Stores actual attendance, Random Forest predictions, prediction errors, and dataset assignments for all 323 modeling observations.
+The previously verified dataset contains 324 home games. One game has missing attendance and remains in `fact_game` but is excluded from the modeling table, leaving 323 modeling observations.
 
-The database contains 324 home games from the 2022–2025 seasons. One game has missing attendance, leaving 323 observations in the ML feature table.
+See `sql/schema.sql` and `docs/field_sources.md` for table definitions and field documentation.
 
-### Feature Engineering
+## Features and Prediction Timing
 
-The initial ML feature table includes two derived features:
+The selected model uses:
 
-- **Five-game rolling attendance average:** Average attendance from up to five previous home games within the same season, using only attendance available before the seven-day prediction cutoff.
-- **Days since previous home game:** Number of calendar days since the previous scheduled home game, resetting at the beginning of each season.
-- **Mariners winning percentage:** Overall team winning percentage, including home and away games, calculated from completed MLB games before the seven-day prediction cutoff.
+- Weekend and U.S. holiday indicators.
+- Month.
+- Day/night designation.
+- Opponent.
+- Average attendance at up to five eligible previous home games.
+- Mariners overall winning percentage before the prediction cutoff.
 
-The rolling attendance average is missing for 28 games without eligible historical attendance. These values are preserved as NULL, with a separate indicator identifying whether attendance history is available.
+Historical attendance and winning-percentage features reset each season and use records dated strictly before the seven-day prediction cutoff.
 
-Opponent and day-of-week categories are stored as text in PostgreSQL. Categorical encoding will be performed in Python during the modeling stage.
+The feature table also contains scheduling and availability fields that are not all used by the selected model, including days since the previous scheduled home game and an attendance-history indicator.
 
-Actual game-day precipitation is excluded from the initial seven-day-ahead prediction features because it would not be known when the prediction is made.
+Missing numerical model inputs are filled using means calculated from training rows only. These means and the encoded feature-column order are saved with the model. Categorical inputs are encoded in Python.
 
-### Training, Validation, and Testing
+Calendar-date filtering does not independently establish the exact historical availability of every source field or account for every schedule revision.
 
-The data is divided chronologically to evaluate predictions on later seasons:
+## Model Evaluation
+
+The datasets are divided chronologically:
 
 | Dataset | Seasons | Games |
-|---|---|---|
+|---|---|---:|
 | Training | 2022–2023 | 161 |
 | Validation | 2024 | 81 |
-| Testing | 2025 | 81 |
-| **Total** | | **323** |
+| Test | 2025 | 81 |
+| Total | | 323 |
+
+Mean Absolute Error (MAE) measures the average absolute difference between predicted and actual attendance, in fans.
+
+| Model | Validation MAE, Fans |
+|---|---:|
+| Baseline: training attendance mean | 6,725 |
+| Linear Regression | 6,812 |
+| Decision Tree | 6,318 |
+| Random Forest | 5,790 |
+
+Random Forest was selected because it had the lowest validation MAE, approximately 13.9% below the baseline. Its separate 2025 test MAE was approximately 6,166 fans.
+
+These are rounded results from the verified project run. The modeling script prints results for each new run.
+
+The model and preprocessing information are saved to `model/attendance_model.joblib`. The pipeline rebuilds this file; it is not committed to GitHub.
+
+See `docs/model_report.md` for exploration, model comparisons, interpretation, and limitations.
 
 ## Data Quality
 
-The project includes seven automated data-quality checks:
+The pipeline checks:
 
-1. No duplicate game IDs.
-2. Attendance values within the defined
+1. Duplicate game IDs.
+2. Attendance values outside the defined valid range.
+3. Missing attendance targets in the modeling table.
+4. Invalid game foreign keys.
+5. Games without matching weather dates.
+6. Differences between source and loaded game counts.
+7. Duplicate weather dates.
 
+A failed check stops subsequent pipeline stages.
 
-## Attendance Prediction Models
+Missing attendance targets are excluded from modeling. Missing precipitation remains unknown rather than being replaced with zero. See `docs/missing_data.md`.
 
-The project uses 323 Mariners home games with recorded attendance. The models are trained on 2022–2023 games, compared using 2024 validation games, and evaluated on 2025 test games.
+## Setup on Windows PowerShell
 
-Three regression models were compared using Mean Absolute Error (MAE):
+The project has been developed using Python 3.14, PostgreSQL 18, Git, and Windows PowerShell 5.1.
 
-| Model | Validation MAE (Fans) |
-|---|---:|
-| Baseline (Training Average) | 6,725 |
-| Linear Regression | 6,812 |
-| Decision Tree | 6,318 |
-| **Random Forest** | **5,790** |
+You need:
 
-Random Forest was selected because it produced the lowest validation error. Its final 2025 test MAE was 6,166 fans.
+- Python 3.14.
+- Git.
+- A running PostgreSQL server reachable on the default port, 5432.
+- A PostgreSQL account allowed to create and load tables in the project database.
+- An Anthropic API key with access to the model used by the summary script and sufficient API credit.
+- Internet access to the data sources and Anthropic API.
 
-The selected model uses scheduling, opponent, recent attendance, and historical team-performance features. Missing numerical values are filled using averages calculated from the training data only.
+### 1. Clone the Repository
 
-The model saves 323 predictions to the PostgreSQL `model_predictions` table, including actual attendance, predicted attendance, error, and dataset assignment.
+From the folder where you want to keep the project:
 
-The exploratory charts and detailed modeling results are documented in `docs/model_report.md`.
+```powershell
+git clone https://github.com/ebrown1212/bmkt670-final-project.git
+Set-Location .\bmkt670-final-project
+```
 
-## Running the Complete Pipeline
+Run all remaining project commands from this repository root.
 
-Activate the project's Python virtual environment and ensure PostgreSQL is running.
+### 2. Create a Fresh Virtual Environment
 
-From the project root directory, run:
+```powershell
+py -3.14 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+```
+
+If `py` is unavailable, use your Python 3.14 executable in its place.
+
+### 3. Start PostgreSQL and Create a Database
+
+PostgreSQL must be running before the pipeline connects.
+
+For a standard Windows service installation, start PostgreSQL through Windows Services. On a machine configured for direct startup, run the following in a separate, non-administrator PowerShell window and leave that window open:
+
+```powershell
+& "C:\Program Files\PostgreSQL\18\bin\postgres.exe" -D "C:\Program Files\PostgreSQL\18\data"
+```
+
+Use the paths appropriate to your installation. Do not attempt direct startup if that PostgreSQL instance is already running.
+
+In your project terminal, check connectivity:
+
+```powershell
+& "C:\Program Files\PostgreSQL\18\bin\pg_isready.exe" -h localhost -p 5432
+```
+
+The expected result is `accepting connections`.
+
+Create a new, dedicated database:
+
+```powershell
+& "C:\Program Files\PostgreSQL\18\bin\createdb.exe" -h localhost -p 5432 -U postgres mariners_analytics
+```
+
+Enter your PostgreSQL password when prompted. Replace `postgres` with your PostgreSQL username if different.
+
+Database creation is a one-time step. The Python loader creates tables inside the existing database; it does not create the database itself.
+
+For a fresh-clone verification alongside an existing project, use a separate database name such as `mariners_analytics_verify` in both the creation command and `.env`.
+
+### 4. Configure Environment Variables
+
+Copy the blank template:
+
+```powershell
+Copy-Item .\.env.example .\.env
+notepad .\.env
+```
+
+Fill in your local values:
+
+```text
+DB_HOST=localhost
+DB_NAME=mariners_analytics
+DB_USER=your_postgresql_username
+DB_PASSWORD=your_postgresql_password
+ANTHROPIC_API_KEY=your_anthropic_api_key
+```
+
+If you created a verification database, use its name for `DB_NAME`.
+
+Save the file. Never commit `.env`, display it in a recording, or share its contents. `.env.example` contains variable names with blank values and is safe to commit.
+
+## Run the Complete Pipeline
+
+With the virtual environment activated and PostgreSQL running:
 
 ```powershell
 python .\run_pipeline.py
 ```
 
-The pipeline executes the following steps in order:
+The pipeline:
 
-1. Extract Baseball-Reference game data.
-2. Extract MLB Stats API schedule data.
-3. Extract Meteostat weather data.
-4. Transform the data and generate ML features.
-5. Rebuild and load the PostgreSQL tables.
-6. Run seven automated data-quality checks.
-7. Train the attendance models and save predictions to PostgreSQL.
+1. Creates the required output folders.
+2. Extracts Baseball-Reference data.
+3. Extracts MLB Stats API data.
+4. Extracts Meteostat weather data.
+5. Transforms data and constructs historical features.
+6. Rebuilds and loads PostgreSQL tables.
+7. Runs seven data-quality checks.
+8. Trains models, saves predictions, and saves the selected model bundle.
+9. Generates and stores AI summaries for all test games.
 
 A successful run ends with:
 
 ```text
-Predictions prepared: 323
-Predictions saved to PostgreSQL: 323
-
 Pipeline completed successfully!
 ```
 
-The pipeline rebuilds the database tables and replaces existing predictions, allowing the workflow to be rerun without creating duplicate records.
+The pipeline rebuilds project tables in the database named in `.env`, replacing existing project data, predictions, and summaries. Use a dedicated database.
+
+Each full run makes new Anthropic API calls. The previously measured 81-game summary run had an estimated token cost of approximately $0.046 at the rates documented in `docs/dashboard_notes.md`. Actual usage and pricing can differ.
+
+If a stage fails, the pipeline stops. It does not undo earlier completed stages. Review the reported error before rerunning.
+
+Public source availability and website changes can affect extraction.
 
 ## Run the Dashboard
 
-Create a `.env` file in the project root containing your PostgreSQL
-connection settings and Claude API key:
-
-```text
-DB_HOST=your_database_host
-DB_NAME=your_database_name
-DB_USER=your_database_user
-DB_PASSWORD=your_database_password
-ANTHROPIC_API_KEY=your_api_key
-```
-
-Keep `.env` out of GitHub.
-
-With the project's virtual environment activated and PostgreSQL running,
-run these commands from the project root:
+Run the pipeline first so the database tables and saved model exist.
 
 ```powershell
-python .\run_pipeline.py
 python -m streamlit run .\dashboard\app.py
 ```
 
-The pipeline rebuilds the database, saves the trained model and preprocessing
-information to `model/attendance_model.joblib`, and generates AI summaries
-for all test games. Each full run makes new Claude API calls.
+Open the local URL printed in the terminal, normally:
 
-The dashboard includes historical attendance analysis, model evaluation,
-business recommendations, an upcoming-game prediction tool, and stored
-AI summaries. Viewing the dashboard does not call the Claude API.
+```text
+http://localhost:8501
+```
 
-The saved model file is excluded from GitHub and rebuilt by the pipeline.
-The prediction range is the predicted attendance plus or minus test MAE;
-it is a typical-error guide, not a statistical prediction interval.
+Keep PostgreSQL and Streamlit running while using the dashboard.
+
+Charts and tables read PostgreSQL data. The future-game tool loads the saved model and applies the saved feature encoding. AI summaries are read from PostgreSQL; opening the dashboard does not make Anthropic API calls.
+
+Interact with the dashboard or refresh it after a pipeline rerun to load updated results.
+
+## Using the Prediction Tool
+
+Enter a future-game scenario using information available seven days before the game.
+
+The attendance-history and winning-percentage defaults are training-data means, not current team information. Replace them with eligible historical values when available.
+
+The displayed range is prediction plus or minus test MAE. It is a typical-error guide, not a statistical prediction interval or guarantee.
+
+## AI Summaries
+
+`ai/generate_summaries.py` sends one request per test game to Claude Haiku 4.5 using game facts, predicted attendance, actual attendance, and Python-calculated error direction and size.
+
+Summaries are saved in `ai_summaries`. Rerunning the summary script updates existing game IDs rather than adding duplicate summaries, but makes new API calls.
+
+Three saved summaries were checked against source facts. An earlier prompt produced an incorrect percentage; the revised prompt prohibits added statistics and uses Python-calculated errors.
+
+Checking three examples does not establish that all summaries are correct. Summaries describe historical prediction results and do not establish causes of attendance or explain model behavior.
+
+## Repository Guide
+
+| Location | Contents |
+|---|---|
+| README.md | Project overview and setup/run instructions |
+| requirements.txt | Python dependencies |
+| .env.example | Blank environment-variable template |
+| run_pipeline.py | Sequential pipeline runner |
+| db_check.py | Database connectivity and table-list check |
+| etl/ | Extraction, transformation, loading, and quality checks |
+| sql/schema.sql | PostgreSQL table definitions |
+| model/ | Training script and locally generated model bundle |
+| ai/ | API-based summary generation |
+| dashboard/ | Streamlit application |
+| docs/data_flow.png | Data-flow diagram |
+| docs/field_sources.md | Field definitions and sources |
+| docs/missing_data.md | Missing-data findings and handling |
+| docs/model_report.md | Modeling results and interpretation |
+| docs/dashboard_notes.md | Dashboard purpose, AI prompt, validation, and cost |
+| docs/figures/ | Exploratory charts |
+| data/raw/ | Generated source extracts; ignored by Git |
+| data/clean/ | Generated transformed tables; ignored by Git |
+
+## Limitations and Next Improvement
+
+The model uses a small historical dataset and excludes promotions, ticket prices, and advance ticket sales. Historical opponent averages are descriptive associations and may involve small sample sizes.
+
+Predicted attendance estimates potential audience size. It does not directly measure advertising exposure, conversions, or revenue.
+
+A useful next improvement would be adding verified promotional schedules, investigating large misses, and evaluating whether the additional information improves future predictions.

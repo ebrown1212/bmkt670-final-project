@@ -28,4 +28,4 @@
 
 **Estimated full-run cost:** The latest 81-game run used 22,814 input tokens and 4,618 output tokens. At $1/million input tokens and $5/million output tokens: (22,814 / 1,000,000 × $1) + (4,618 / 1,000,000 × $5) = $0.045904, approximately 4.6 cents. This excludes earlier tests; subsequent runs may differ. Pricing: https://platform.claude.com/docs/en/about-claude/pricing
 
-**With more time:** Add verified promotional schedules to investigate large attendance misses and evaluate whether they improve predictions.
+**With more time:** I would like to add verified promotional schedules to investigate large attendance misses and evaluate whether they improve predictions.
